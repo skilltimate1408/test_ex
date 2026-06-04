@@ -2,67 +2,99 @@ import streamlit as st
 import pandas as pd
 from supabase import create_client
 
-# Supabase Credentials
+# =========================
+# SUPABASE CONFIGURATION
+# =========================
 url = "https://xnmzivatgiaetmhbphdz.supabase.co"
 key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhubXppdmF0Z2lhZXRtaGJwaGR6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk5NjE0MTMsImV4cCI6MjA5NTUzNzQxM30.FCEd471MjR1DypuK6TpMWg5dNLlhiXflh4NhHjxdB3o"
 
-
 supabase = create_client(url, key)
 
-st.title("📤 Exam Room Upload")
+# =========================
+# SIDEBAR NAVIGATION
+# =========================
+st.sidebar.title("Navigation")
 
-uploaded_file = st.file_uploader(
-    "Upload Excel File",
-    type=["xlsx"]
+page = st.sidebar.radio(
+    "Select Page",
+    ["🎓 Student", "📤 Admin"]
 )
 
-if uploaded_file:
+# =========================
+# STUDENT PAGE
+# =========================
+if page == "🎓 Student":
 
-    # Read Excel
-    df = pd.read_excel(uploaded_file)
+    st.title("🎓 Exam Room Finder")
 
-    # Convert exam_date column to string
-    if "exam_date" in df.columns:
-        df["exam_date"] = pd.to_datetime(
-            df["exam_date"]
-        ).dt.strftime("%Y-%m-%d")
+    roll = st.text_input("Enter Roll Number")
 
-    st.subheader("Preview")
-    st.dataframe(df)
-
-    if st.button("Upload to Supabase"):
+    if st.button("Search"):
 
         try:
-            records = df.to_dict(orient="records")
+            result = (
+                supabase.table("exam_rooms")
+                .select("*")
+                .eq("roll_no", roll)
+                .execute()
+            )
 
-            supabase.table(
-                "exam_rooms"
-            ).insert(records).execute()
+            if result.data:
 
-            st.success("✅ Data Uploaded Successfully!")
+                data = result.data[0]
+
+                st.success("Exam Details Found")
+
+                st.write(f"🏢 Building Name: {data['building_name']}")
+                st.write(f"🚪 Room Number: {data['room_no']}")
+                st.write(f"📅 Exam Date: {data['exam_date']}")
+
+            else:
+                st.error("Roll Number Not Found")
 
         except Exception as e:
-            st.error(f"❌ Error: {e}")
+            st.error(f"Error: {e}")
 
-st.title("Exam Room Finder")
+# =========================
+# ADMIN PAGE
+# =========================
+elif page == "📤 Admin":
 
-roll = st.text_input("Enter Roll Number")
+    st.title("📤 Admin Upload")
 
-if st.button("Search"):
+    uploaded_file = st.file_uploader(
+        "Upload Excel File",
+        type=["xlsx"]
+    )
 
-    result = supabase.table("exam_rooms")\
-        .select("*")\
-        .eq("roll_no", roll)\
-        .execute()
+    if uploaded_file:
 
-    if result.data:
-        data = result.data[0]
+        df = pd.read_excel(uploaded_file)
 
-        st.success("Exam Details Found")
+        # Convert date column
+        if "exam_date" in df.columns:
+            df["exam_date"] = pd.to_datetime(
+                df["exam_date"],
+                errors="coerce"
+            ).dt.strftime("%Y-%m-%d")
 
-        st.write("🏢 Building:", data["building_name"])
-        st.write("🚪 Room No:", data["room_no"])
-        st.write("📅 Exam Date:", data["exam_date"])
+        st.subheader("Preview")
+        st.dataframe(df)
 
-    else:
-        st.error("Roll Number Not Found")
+        if st.button("Upload Data"):
+
+            try:
+                records = df.fillna("").to_dict(
+                    orient="records"
+                )
+
+                supabase.table(
+                    "exam_rooms"
+                ).insert(records).execute()
+
+                st.success(
+                    f"✅ {len(records)} records uploaded successfully!"
+                )
+
+            except Exception as e:
+                st.error(f"❌ Upload Failed: {e}")
